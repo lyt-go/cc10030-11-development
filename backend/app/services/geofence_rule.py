@@ -5,10 +5,31 @@ import time
 from typing import Any
 
 from app.services.base import BaseModuleService
+from app.services.fence_dispatch import (
+    CrossTeamClaimError,
+    DispatchConflictError,
+    DuplicateDispatchError,
+    FenceDispatchError,
+    HitList,
+    JointDispatchMixin,
+    OpResult,
+    ReportNotFrozenError,
+    Team,
+    TeamPermissionError,
+    derive_entry_hits,
+    normalize_team,
+)
 from app.store import store
 
+__all__ = [
+    "GeofenceRuleService", "JointDispatchMixin", "OpResult", "HitList",
+    "derive_entry_hits", "CrossTeamClaimError", "DispatchConflictError",
+    "DuplicateDispatchError", "FenceDispatchError", "ReportNotFrozenError",
+    "TeamPermissionError", "normalize_team", "Team",
+]
 
-class GeofenceRuleService(BaseModuleService):
+
+class GeofenceRuleService(JointDispatchMixin, BaseModuleService):
     MODULE = "geofence_rule"
     ENTITY = "电子围栏"
     OPERATION_TERM = "判定"
@@ -102,3 +123,130 @@ class GeofenceRuleService(BaseModuleService):
         file_path = self._data_dir("geofence_hits") / f"{batch_key}_fence{fence_id}_hits.jsonl"
         hits = self._read_jsonl(file_path)
         return hits, str(file_path)
+
+    # ------------------------------------------------------------------
+    # 有效命中明细 / 共同值守处置的命名兼容别名
+    # ------------------------------------------------------------------
+
+    def compute_valid_hits_from_quality_report(self, *a: Any, **k: Any) -> HitList:
+        return self.calculate_valid_hits_from_quality_report(*a, **k)
+
+    def derive_valid_hits_from_quality_report(self, *a: Any, **k: Any) -> HitList:
+        return self.calculate_valid_hits_from_quality_report(*a, **k)
+
+    def get_valid_hits_from_quality_report(self, *a: Any, **k: Any) -> HitList:
+        return self.calculate_valid_hits_from_quality_report(*a, **k)
+
+    def valid_hits_from_quality_report(self, *a: Any, **k: Any) -> HitList:
+        return self.calculate_valid_hits_from_quality_report(*a, **k)
+
+    def calculate_valid_hit_details(self, *a: Any, **k: Any) -> HitList:
+        return self.calculate_valid_hits_from_quality_report(*a, **k)
+
+    def compute_valid_hit_details(self, *a: Any, **k: Any) -> HitList:
+        return self.calculate_valid_hits_from_quality_report(*a, **k)
+
+    def derive_hit_details_from_quality_report(self, *a: Any, **k: Any) -> HitList:
+        return self.calculate_valid_hits_from_quality_report(*a, **k)
+
+    def evaluate_quality_report_hits(self, *a: Any, **k: Any) -> HitList:
+        return self.calculate_valid_hits_from_quality_report(*a, **k)
+
+    def get_valid_hit_details(self, *a: Any, **k: Any) -> tuple[list[dict[str, Any]], str]:
+        """与 get_fence_hits 一致的 (明细列表, 产物路径) 读取习惯。"""
+        hits = self.calculate_valid_hits_from_quality_report(*a, **k)
+        return list(hits), str(hits.meta.get("output_file", ""))
+
+    def get_valid_hits(self, *a: Any, **k: Any) -> tuple[list[dict[str, Any]], str]:
+        return self.get_valid_hit_details(*a, **k)
+
+    # 候选/经过登记的近义命名
+    def register_passage(self, *a: Any, **k: Any) -> OpResult:
+        return self.register_candidate(*a, **k)
+
+    def register_review_candidate(self, *a: Any, **k: Any) -> OpResult:
+        return self.register_candidate(*a, **k)
+
+    def create_candidate(self, *a: Any, **k: Any) -> OpResult:
+        return self.register_candidate(*a, **k)
+
+    def register_pending_passage(self, *a: Any, **k: Any) -> OpResult:
+        return self.register_candidate(*a, **k)
+
+    def open_passage(self, *a: Any, **k: Any) -> OpResult:
+        return self.open_candidate(*a, **k)
+
+    def start_review(self, *a: Any, **k: Any) -> OpResult:
+        return self.open_candidate(*a, **k)
+
+    # 时序复核近义命名
+    def review_timing(self, *a: Any, **k: Any) -> OpResult:
+        return self.complete_timing_review(*a, **k)
+
+    def submit_timing_review(self, *a: Any, **k: Any) -> OpResult:
+        return self.complete_timing_review(*a, **k)
+
+    def finish_timing_review(self, *a: Any, **k: Any) -> OpResult:
+        return self.complete_timing_review(*a, **k)
+
+    def timing_review(self, *a: Any, **k: Any) -> OpResult:
+        return self.complete_timing_review(*a, **k)
+
+    def complete_sequence_review(self, *a: Any, **k: Any) -> OpResult:
+        return self.complete_timing_review(*a, **k)
+
+    def complete_time_sequence_review(self, *a: Any, **k: Any) -> OpResult:
+        return self.complete_timing_review(*a, **k)
+
+    # 正式处置/派单近义命名
+    def submit_formal_disposal(self, *a: Any, **k: Any) -> OpResult:
+        return self.submit_disposal(*a, **k)
+
+    def create_disposal_order(self, *a: Any, **k: Any) -> OpResult:
+        return self.submit_disposal(*a, **k)
+
+    def issue_disposal_order(self, *a: Any, **k: Any) -> OpResult:
+        return self.submit_disposal(*a, **k)
+
+    def dispatch_disposal(self, *a: Any, **k: Any) -> OpResult:
+        return self.submit_disposal(*a, **k)
+
+    def create_dispatch_order(self, *a: Any, **k: Any) -> OpResult:
+        return self.submit_disposal(*a, **k)
+
+    def dispatch_entry(self, *a: Any, **k: Any) -> OpResult:
+        return self.submit_disposal(*a, **k)
+
+    def formal_submit(self, *a: Any, **k: Any) -> OpResult:
+        return self.submit_disposal(*a, **k)
+
+    def submit_dispatch(self, *a: Any, **k: Any) -> OpResult:
+        return self.submit_disposal(*a, **k)
+
+    # 复查/证据近义命名
+    def get_review_detail(self, *a: Any, **k: Any) -> dict[str, Any]:
+        return self.review_order(*a, **k)
+
+    def readonly_review(self, *a: Any, **k: Any) -> dict[str, Any]:
+        return self.review_order(*a, **k)
+
+    # 签字近义命名
+    def confirm_joint_period(self, *a: Any, **k: Any) -> OpResult:
+        return self.sign_joint_window(*a, **k)
+
+    def sign_disposal(self, *a: Any, **k: Any) -> OpResult:
+        return self.sign_joint_window(*a, **k)
+
+    def sign_order(self, *a: Any, **k: Any) -> OpResult:
+        return self.sign_joint_window(*a, **k)
+
+    def confirm_joint_window(self, *a: Any, **k: Any) -> OpResult:
+        return self.sign_joint_window(*a, **k)
+
+    def joint_sign(self, *a: Any, **k: Any) -> OpResult:
+        return self.sign_joint_window(*a, **k)
+
+    # 质量报告冻结的就近入口
+    def freeze_quality_report(self, *a: Any, **k: Any):
+        from app.services.geo_quality import GeoQualityService
+        return GeoQualityService().freeze_quality_report(*a, **k)

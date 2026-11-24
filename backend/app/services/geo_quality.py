@@ -1,6 +1,7 @@
 """轨迹质量领域服务：对采集批次定位点执行漂移检测、重复率和缺失率校验，生成质量报告数据集。"""
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
@@ -134,3 +135,49 @@ class GeoQualityService(BaseModuleService):
         file_path = self._data_dir("quality_reports") / f"{batch_key}_quality.jsonl"
         reports = self._read_jsonl(file_path)
         return reports[0] if reports else {}
+
+    def freeze_quality_report(self, batch_key: str | dict[str, Any] | None = None,
+                              report: dict[str, Any] | None = None,
+                              **kwargs: Any) -> dict[str, Any]:
+        """冻结轨迹质量报告：固化内容并写入校验值，供围栏命中明细引用为正式出处。
+
+        兼容 ``freeze_quality_report(batch_key)``、``freeze_quality_report(report_dict)``
+        与 ``freeze_quality_report(batch_key=..., report=...)``。返回带 frozen/校验值
+        字段的报告字典（同时带 ok/message，动作结果风格也可直接读取）。
+        """
+        from app.services.fence_dispatch import report_checksum
+
+        if isinstance(batch_key, dict) and report is None:
+            report = batch_key
+            batch_key = report.get("batch_key") or report.get("批次编号")
+        if report is None and batch_key:
+            report = self.get_quality_report(str(batch_key))
+        if not isinstance(report, dict) or not report:
+            return {"ok": False, "frozen": False,
+                    "message": f"未找到批次 {batch_key} 的轨迹质量报告"}
+
+        from app.services.fence_dispatch import freeze_report_dict
+        bkey = batch_key or report.get("batch_key") or report.get("批次编号")
+        frozen = freeze_report_dict(report, bkey)
+        frozen.update({"ok": True, "message": "轨迹质量报告已冻结"})
+        if bkey:
+            try:
+                out = self._data_dir("quality_reports") / f"{bkey}_frozen_quality_report.json"
+                with open(out, "w", encoding="utf-8") as f:
+                    json.dump({k: v for k, v in frozen.items() if k not in ("ok", "message")},
+                              f, ensure_ascii=False, indent=2, default=str)
+                frozen["frozen_file"] = str(out)
+            except Exception:
+                pass
+        return frozen
+
+    def verify_frozen_report(self, report: dict[str, Any]) -> bool:
+        """校验冻结报告的校验值是否仍与内容一致。"""
+        from app.services.fence_dispatch import report_checksum
+
+        if not isinstance(report, dict) or not (report.get("frozen") or report.get("冻结")):
+            return False
+        saved = report.get("report_checksum") or report.get("checksum")
+        if not saved:
+            return False
+        return report_checksum(report) == saved

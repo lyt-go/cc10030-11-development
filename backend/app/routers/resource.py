@@ -94,5 +94,25 @@ def create_entry(module: str, payload: EntryPayload) -> ActionResult:
 @router.post("/{module}/{entry_id}/actions", response_model=ActionResult)
 def run_action(module: str, entry_id: int, payload: ActionPayload) -> ActionResult:
     service = require_service(module)
-    entry, message = service.run_action(entry_id, payload.action.strip())
+    context: dict[str, Any] = {}
+    if payload.team is not None:
+        context["team"] = payload.team
+    if payload.remark is not None:
+        context["remark"] = payload.remark
+    if payload.params:
+        context.update(payload.params)
+    # 透传额外 JSON 字段（如 班组/operator），但避开已显式声明的字段
+    declared = {"action", "remark", "team", "params"}
+    extra = {k: v for k, v in payload.model_dump().items() if k not in declared and v is not None}
+    context.update(extra)
+
+    import inspect
+    accepts_context = any(
+        p.kind is inspect.Parameter.VAR_KEYWORD
+        for p in inspect.signature(service.run_action).parameters.values()
+    )
+    if context and accepts_context:
+        entry, message = service.run_action(entry_id, payload.action.strip(), **context)
+    else:
+        entry, message = service.run_action(entry_id, payload.action.strip())
     return ActionResult(ok=entry is not None, message=message, entry=entry)
